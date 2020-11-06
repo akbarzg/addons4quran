@@ -1,4 +1,4 @@
-# addons4quran
+# Addons4Quran
 Addons for Google Docs. 
 
 Addons4Quran is a Google Docs. plugin project.
