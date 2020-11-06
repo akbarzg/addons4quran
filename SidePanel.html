@@ -1,0 +1,316 @@
+
+
+
+<html>
+
+<head>
+<link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css" />
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.1/jquery.min.js"></script>
+
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+
+</head>
+<body>
+
+<div class="sidebar">
+ 
+ <div class="block form-group">
+ 
+  <label for="surahs">Choose a Surah:</label>
+  <select id="surahs" name="surahs" >
+  </select>
+ <br/>
+ <div style="background: #e2f2ff;">
+   <input id="isgetAllCbx" type="checkbox" />
+   <label for="isgetAllCbx">Get all Ayah from the surah?:</label>
+ </div>
+
+  <span style="font-size:20px">OR</span>
+
+ <div class="form-group" style="background: #e2f2ff;">
+  <label for="ayahStart" class="control-label" >From Ayah No.:</label>
+  <select id="ayahStart" name="ayahStart" class="form-control" style="display:inline-flex" placeholder="Select Start Ayah" >
+  </select>
+ <br/>
+  <label for="ayahEnd" class="control-label" >To Ayah No.:</label>
+  <select id="ayahEnd" name="ayahEnd"  class="form-control" style="display:inline-flex" placeholder="Select End Ayah" >
+  </select>
+ </div>
+  <hr/>
+
+  <button class="blue form-control" id="get_ayah">Get Ayahs</button>
+ </div>
+ 
+   Font Size:
+   <input id="slider" type="range" min="1" max="96" value="20" class="slider" ><br/><br/>
+   <div>
+     <span id="sliderOutput" style="font-size:20px">20(اقْرَأْ)</span>
+   </div>
+ <br/>
+ <div id="resultDiv" class="block form-group ">
+ </div>
+  
+</div>
+
+<script>
+
+
+   
+// HANDLER FUNCTIONS ======================================================================================================
+//=========================================================================================================================   
+//=========================================================================================================================   
+   function onSliderChange(){
+      var output = document.getElementById('sliderOutput');
+      output.innerHTML = this.value + '(اقْرَأْ)';
+      output.style.fontSize = this.value+'px';
+   }
+   
+   function surahAjaxHandler(data){
+      data = data.data;
+      //console.log(data);
+      var s = '<option value="">Please Select a Surah</option>';  
+      //console.log('dataLength: '+data.length);
+      
+      for (var i = 0; i < data.length; i++) {  
+        s += '<option value="'+ data[i].number + '" data-total-ayah="' + data[i].numberOfAyahs + '" >' + data[i].number +'] ' + data[i].englishName + ' ( <i> '+ data[i].revelationType +'</i> / '+data[i].numberOfAyahs+'  )' + '</option>';
+      }  
+      $('#surahs').html(s);        
+    }
+    
+    //jqXHR.responseJSON will return responseText as Object.
+    //jqXHR.responseText = "{"code":404,"status":"Not Found","data":"Surat number should be between 1 and 114."}"
+    function ajaxErrorHandler(jqXHR, textStatus, errorThrown ){ 
+      var errMsg = jqXHR.responseJSON.data+"</br>"; 
+      errMsg += 'Error Code: '+jqXHR.responseJSON.code; 
+      showError(errMsg); 
+    }
+    
+    function getAyahArabicHandler(data){
+            //console.log(data);
+            var list = '<ol>';
+            for(var i=0; i<data.data.ayahs.length; i++){
+              list += '<li data-ayah-no="'+data.data.ayahs[i].numberInSurah+'" >'+data.data.ayahs[i].text+'</li>';
+              //list += '<li>' +data.data.ayahs[i].text+ '</li>';
+            }
+            list += '</ol>';
+            $("#resultDiv").html(list);
+            
+            $('<button class="form-control">').addClass('blue')
+              .text('<< Insert into document.')
+              //.tooltip({ content: 'Inserts all the Ayahs below into the current document at current cursor position.' })
+              .click(insertResultInDoc)
+              .prependTo('#resultDiv');
+          
+     }
+     
+     function surahChangeHandler(){      
+          var selectedSurahNo = $(this).val();
+          var selectedOptionEle = $('#surahs option:selected');
+          var selectedSurahText = selectedOptionEle.text();
+          var totalAyahs = selectedOptionEle.data('totalAyah');
+          //console.log('surah changed!!!: ' + selectedSurahNo + ' Text: ' + selectedSurahText +' totalAyahs: '+totalAyahs );
+          var result = '<b>Surah No.:</b> ' +selectedSurahNo+ '</br>' + '<b>Surah Name:</b> '+selectedSurahText+'</br><b>totalAyahs:</b>'+totalAyahs+'</br>';
+          $("#resultDiv").html(result);
+          populateAyahDropdowns(totalAyahs); 
+          
+          //if selected surah has totalAyahs less than 50 then check getAllAyahs checkbox.
+          if(totalAyahs <= 50){
+            $('#isgetAllCbx').prop('checked', true);
+          }else{
+            $('#isgetAllCbx').prop('checked', false);
+          }
+          
+          getAllToggle();
+      }
+      
+      function ayahStartChangeHandler(){
+        //console.log('ayahStart.chanage start!');
+        var s = "";
+        var start = $('#ayahStart option:selected').val();
+        var end = $('#surahs option:selected').data('totalAyah');
+        
+        s += getOptions(start, end, start);
+        $('#ayahEnd').html(s);
+      }
+      
+      function getAyahButtonClickHandler() {  
+        //Do validations here
+        var isChecked = $('#isgetAllCbx').is(':checked');
+        
+        
+        if(!isChecked && !doValidations()){
+          //console.log('validation failed!');
+          return;
+        }
+        
+        var formObj = {};
+        if(isChecked){
+          var selectedOptionEleSurah = $('#surahs option:selected');
+          var totalAyahs = selectedOptionEleSurah.data('totalAyah');
+      
+          formObj.surahNo = selectedOptionEleSurah.val();
+          formObj.startAyah = 1;
+          formObj.endAyah = totalAyahs;
+        }else{
+          formObj = getFormSelectionObject();
+        }
+        
+        //console.log('SurahNo, StartAyah, EndAyah: '+formObj.surahNo+', '+formObj.startAyah+', '+formObj.endAyah );
+        
+        var limit = (formObj.endAyah - formObj.startAyah) + 1;
+        var urlGetAyahArabic = "https://api.alquran.cloud/v1/surah/";
+        urlGetAyahArabic += formObj.surahNo;
+        urlGetAyahArabic += '?offset='+ (formObj.startAyah - 1);
+        urlGetAyahArabic += '&limit='+limit;
+        
+        //console.log('Calling Ajax Url: '+urlGetAyahArabic);
+        $.ajax({url:urlGetAyahArabic, error:ajaxErrorHandler})
+          .then(getAyahArabicHandler);
+               
+        //=====================================================
+        // ۝ - arabic end of ayah (U+06DD) 
+        //=====================================================
+        //$("#resultDiv").click(insertResultInDoc);             
+      }
+      
+//=========================================================================================================================
+//=========================================================================================================================    
+//=========================================================================================================================    
+
+
+
+
+//HELPER FUNCTIONS=========================================================================================================
+//=========================================================================================================================    
+//=========================================================================================================================    
+
+function showError(msg){
+  $('<span></span>').addClass('error').html(msg).appendTo('#resultDiv');
+}
+
+function doValidations(){
+        // Dropdown ids: surahs,ayahStart,ayahEnd
+        //console.log('doValidation Called...');
+        var form = getFormSelectionObject();
+        //{'surahNo':surahNo, 'startAyah':start, 'endAyah':end };
+        //console.log(form);
+        var msgErr = "";
+        if(!form.surahNo)
+          msgErr = "Please select a Surah No.";
+        else if(!form.startAyah)
+          msgErr = "Please select a Starting Ayah No.";
+          
+        if(msgErr){
+          showError(msgErr);
+        }else{
+          return true;
+        }
+        return false;
+}
+
+function insertResultInDoc(){        
+    //console.log('insertResultInDoc Called... ');
+    
+    this.insertText = "";
+    var self = this;
+    $("#resultDiv li").each(function(i){
+    //$(this).attr('rel'); // This is your custom attribute rel value
+    self.insertText += $(this).text();
+    var ayahNo = $(this).data('ayahNo');
+    self.insertText += '(۝'+ayahNo+')';
+    });
+    //console.log('insertText: '+this.insertText);
+    var fontSize = $('#slider').val();
+    if(!fontSize)
+      fontSize = 20;
+    google.script.run.insertResult(this.insertText, fontSize);
+}
+
+function getFormSelectionObject(){
+  var surahNo = $('#surahs option:selected').val();
+  var start = $('#ayahStart option:selected').val();
+  var end = $('#ayahEnd option:selected').val();
+  return {'surahNo':surahNo, 'startAyah':start, 'endAyah':end };
+}
+
+function populateAyahDropdowns(totalAyahs){
+  
+  var s = '<option value="">Please Select Starting Ayah</option>';  
+  s += getOptions(1, totalAyahs);  
+  $('#ayahStart').html(s); 
+  
+}
+
+function getOptions(start, end, select = null){
+  var opt = "";
+  for (var i = start; i <= end; i++) {  
+  if(select!=null && i == select){
+  opt += '<option selected value="'+ i + '">' + i + '</option>';
+  }else{
+  opt += '<option value="'+ i + '">' + i + '</option>';
+  }
+  }
+  return opt;
+}
+
+function getAllToggle() {
+    var chkbox = $("#isgetAllCbx").is(":checked");
+    $('#ayahStart').prop('disabled', chkbox);
+    $('#ayahEnd').prop('disabled', chkbox);
+    /*
+    if ($("#isgetAllCbx").is(":checked")) {
+        $('#ayahStart').prop('disabled', false);
+        $('#ayahEnd').prop('disabled', false);
+    }
+    else {
+        $('#pizza_kind').prop('disabled', 'disabled');
+    }
+    */
+}
+
+//=========================================================================================================================
+//=========================================================================================================================    
+//=========================================================================================================================    
+//MAIN SECTION  
+$(document).ready(function() {
+
+    //var urlWs = "https://api.alquran.cloud/v1/ayah/262";
+    //var urlSurahList = "https://api.alquran.cloud/v1/surah";
+   var slider = document.getElementById("slider");
+   slider.oninput = onSliderChange;
+   
+   $('#isgetAllCbx').change(getAllToggle);
+ 
+  
+//---------------------------------------------------------------------------------------
+//Update Surah Dropdown
+//http://api.alquran.cloud/v1/surah
+//Props: number, name, englishName, englishNameTranslation, numberOfAyahs, revelationType
+//---------------------------------------------------------------------------------------
+ //console.log('Calling SurahList Ajax ============================');
+ $.ajax({
+  url: "https://api.alquran.cloud/v1/surah"
+ }).then(surahAjaxHandler);
+ //console.log('End SurahList Ajax...');   
+
+//On Surah change, populate ayah dropdowns.
+//surahs, ayahStrat
+//https://api.alquran.cloud/v1/surah/1?offset=1&limit=3 - Returns verses 2-4 of Surah Al-Fatiha
+$("#surahs").change(surahChangeHandler);
+$('#ayahStart').change(ayahStartChangeHandler);
+//======================================================
+//https://api.alquran.cloud/v1/surah/1?offset=1&limit=3
+//retObj.data.ayahs/edition/englishName/englishNameTranslation/name/number/numberOfAyahs/revelationType
+//retObj.data.ayahs[i].text/number/numberInSurah/juz/manzil/page/ruku/sajda/hizbQuarter
+//======================================================
+$("#get_ayah").click(getAyahButtonClickHandler);
+
+})
+
+
+</script>
+
+</body>
+</html>
